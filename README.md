@@ -1,7 +1,9 @@
 # sub2clash
 
-把订阅链接转成 Clash Verge 配置，支持 ACL4SSR 规则和自定义直连域名。
+订阅链接 → Clash Verge 配置，托盘一键更新。
 
-填好 `sub_links.txt`，跑 `.\sub2clash.ps1` 更新，或 `.\tray.ps1` 启动托盘一键更新。
+```powershell
+dotnet publish sub2clash.csproj -c Release -r win-x64
+```
 
-依赖：[Docker](https://www.docker.com/products/docker-desktop/) + [Bun](https://bun.sh/) + [Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev)。
+单文件 exe 和 `sub_links.txt` / `rules.txt` / `my_direct.txt` 放同目录跑。
