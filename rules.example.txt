@@ -1,5 +1,3 @@
-# 可选规则（写入 rules.txt）:
-# ACL4SSR_Online_Mini.ini    精简版
-# ACL4SSR_Online.ini         标准版
-# ACL4SSR_Online_Full.ini    完整版（含广告拦截）
-# ACL4SSR_Online_NoReject.ini 无拦截版（推荐）
+# rules.txt（可选，不写默认 cn）:
+# none  极简：仅 GEOIP,CN 直连 + 其余走代理
+# cn    广告拦截(geosite) + 国内直连 + 其余走代理

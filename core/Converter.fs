@@ -6,13 +6,11 @@ namespace Sub2Clash.Core
 
 open System
 open System.Collections.Generic
-open System.Diagnostics
 open System.IO
 open System.IO.Pipes
 open System.Net.Http
 open System.Text
 open System.Text.RegularExpressions
-open System.Threading.Tasks
 open Parser
 open YamlDotNet.Serialization
 
@@ -41,70 +39,13 @@ type ProfileData() =
     member val current: string = null with get, set
     member val items: List<ProfileItem> = null with get, set
 
-[<AllowNullLiteral>]
-type SubDoc() =
-    member val rules: List<string> = null with get, set
-
 [<AutoOpen>]
 module private Helpers =
-    // ACL4SSR 组名 → 我们的 3 组映射
-    let groupMap =
-        [ "🎯 全球直连", "DIRECT"; "🌏 国内媒体", "DIRECT"; "📺 哔哩哔哩", "DIRECT"
-          "Ⓜ️ 微软Bing", "DIRECT"; "Ⓜ️ 微软云盘", "DIRECT"; "Ⓜ️ 微软服务", "DIRECT"
-          "🍎 苹果服务", "DIRECT"; "🎮 游戏平台", "DIRECT"; "🎶 网易音乐", "DIRECT"
-          "📢 谷歌FCM", "DIRECT"
-          "🛑 广告拦截", "REJECT"; "🍃 应用净化", "REJECT"; "🛑 全球拦截", "REJECT"
-          "🚀 节点选择", "🔰 手动选择"; "🔰 节点选择", "🔰 手动选择"; "♻️ 自动选择", "♻️ 自动选择"
-          "🐟 漏网之鱼", "🔰 手动选择"; "📲 电报消息", "🔰 手动选择"; "📲 电报信息", "🔰 手动选择"
-          "💬 Ai平台", "🔰 手动选择"; "📹 油管视频", "🔰 手动选择"
-          "🎥 奈飞视频", "🔰 手动选择"; "🎥 NETFLIX", "🔰 手动选择"; "📺 巴哈姆特", "🔰 手动选择"
-          "🌍 国外媒体", "🔰 手动选择"; "🎥 奈飞节点", "🔰 手动选择" ]
-        |> Map.ofList
-
-    let validGroups = Set.ofList [ "DIRECT"; "REJECT"; "🔰 手动选择"; "♻️ 自动选择"; "🛑 广告拦截" ]
-
     let mask (link: string) =
         let i = link.IndexOf '?'
-        if i < 0 then link else link[..i] + "?***"
+        if i < 0 then link else link.Substring(0, i) + "?***"
 
     let truncate (s: string) (n: int) = if s.Length <= n then s else s[..n]
-
-    let remapRule (rule: string) =
-        let parts = rule.Split ','
-        let mutable changed = 0
-
-        for i in 0 .. parts.Length - 1 do
-            if changed = 0 then
-                let f = parts[i].Trim()
-
-                match Map.tryFind f groupMap with
-                | Some mapped ->
-                    parts[i] <- mapped
-                    changed <- 1
-                | None ->
-                    let isGroupLike =
-                        f.Length > 1
-                        && not (Set.contains f validGroups)
-                        && (f |> Seq.exists (fun c -> c >= '\u4e00' && c <= '\u9fff')
-                            || f |> Seq.exists Char.IsSurrogate)
-
-                    if isGroupLike then
-                        parts[i] <- "🔰 手动选择"
-                        changed <- 1
-
-        String.concat "," parts, changed
-
-    let runProc (exe: string) (args: string) =
-        use p = new Process()
-        p.StartInfo.FileName <- exe
-        p.StartInfo.Arguments <- args
-        p.StartInfo.CreateNoWindow <- true
-        p.StartInfo.UseShellExecute <- false
-        if p.Start() then
-            p.WaitForExit 30000 |> ignore
-            if p.HasExited then p.ExitCode else -1
-        else
-            -1
 
     let reload () =
         try
@@ -170,7 +111,6 @@ module private Helpers =
 // ─── 更新服务 ───
 
 type UpdateService() =
-    let subApi = "http://127.0.0.1:25500"
     let profUid = "sub2clash"
 
     // HttpClient 放构造函数而非模块级 let：初始化异常不会变成 TypeInitializationException
@@ -178,12 +118,6 @@ type UpdateService() =
         let c = new HttpClient()
         c.Timeout <- TimeSpan.FromSeconds 30.0
         c.DefaultRequestHeaders.UserAgent.ParseAdd "clash-verge/2.0.0"
-        c
-
-    // 127.0.0.1:25500 走系统代理（Clash）会 502，subconverter 请求强制直连
-    let httpNoProxy =
-        let c = new HttpClient(new HttpClientHandler(UseProxy = false, Proxy = null))
-        c.Timeout <- TimeSpan.FromSeconds 30.0
         c
 
     member private _.fetchLines (url: string) =
@@ -209,36 +143,6 @@ type UpdateService() =
                     )
             with _ ->
                 return None
-        }
-
-    member private _.ensureSubconverter () =
-        task {
-            try
-                use! _ = httpNoProxy.GetAsync $"{subApi}/version"
-                return ()
-            with _ ->
-                let start = runProc "docker" "start subconverter"
-                let created = runProc "docker" "run -d --name subconverter --restart=always -p 25500:25500 tindy2013/subconverter:latest"
-                if start <> 0 && created <> 0 then
-                    invalidOp "Docker 启动失败"
-                do! Task.Delay 3000
-        }
-
-    member private _.fetchSub (url: string) =
-        task {
-            let mutable body = ""
-            for _ in 1..3 do
-                if body = "" then
-                    try
-                        use! rsp = httpNoProxy.GetAsync url
-                        if rsp.IsSuccessStatusCode then
-                            let! t = rsp.Content.ReadAsStringAsync()
-                            body <- t
-                    with _ ->
-                        ()
-                    if body = "" then
-                        do! Task.Delay 2000
-            return body
         }
 
     member private this.run (log: string -> unit) =
@@ -307,55 +211,27 @@ type UpdateService() =
             log $"  原生解析 {proxies.Count} 个节点 | 不支持 {unsupported} 个 | 拉取失败 {fetchFail} 个"
             if proxies.Count = 0 then invalidOp "没有解析到任何节点"
 
-            // 2. 规则：rules.txt = none → 内置极简规则；否则 subconverter 生成
+            // 2. 规则：本地生成，用 Clash Verge 自带的 geosite 数据，无需 Docker/subconverter
+            //    rules.txt = none/off → 极简；其他（含不写）→ cn 模式（广告拦截 + 国内直连）
             let rulesFile = Path.Combine(root, "rules.txt")
-            let mutable ruleConfig = "/base/config/ACL4SSR_Online_Mini.ini"
-            let mutable useConfig = true
-
-            if File.Exists rulesFile then
-                let r =
-                    File.ReadLines rulesFile
-                    |> Seq.tryHead
-                    |> Option.defaultValue ""
-                    |> _.Trim()
-
-                if r.Length > 0 && not (r.StartsWith '#') then
-                    if r = "none" || r = "off" then
-                        useConfig <- false
-                        ruleConfig <- "none"
-                    else
-                        ruleConfig <- if r.StartsWith '/' || r.StartsWith "http" then r else "/base/config/" + r
-
-            let mutable rules: string list = []
-            let mutable remapped = 0
-
-            if useConfig then
-                log $"══════ subconverter（规则: {ruleConfig.Split('/') |> Array.last}）══════"
-                do! this.ensureSubconverter ()
-                let merged = String.concat "|" links
-                let url =
-                    $"{subApi}/sub?target=clash&url={Uri.EscapeDataString merged}&config={ruleConfig}&insert=true"
-                let! body = this.fetchSub url
-                if body <> "" then
-                    try
-                        let des = DeserializerBuilder().IgnoreUnmatchedProperties().Build()
-                        let doc = des.Deserialize<SubDoc> body
-                        match doc.rules with
-                        | null -> ()
-                        | rs ->
-                            for r in rs do
-                                let r', c = remapRule r
-                                remapped <- remapped + c
-                                rules <- r' :: rules
-                            rules <- List.rev rules
-                    with _ ->
-                        log "[!] subconverter 返回无效"
+            let mode =
+                if File.Exists rulesFile then
+                    match File.ReadLines rulesFile |> Seq.tryHead with
+                    | Some r when r.Trim() = "none" || r.Trim() = "off" -> "none"
+                    | _ -> "cn"
                 else
-                    log "[!] subconverter 3次重试均失败"
+                    "cn"
 
-                if rules.IsEmpty then log "[!] 外置规则不可用，回退到内置规则"
+            let mutable rules =
+                if mode = "none" then
+                    [ "GEOIP,CN,DIRECT"; "MATCH,🔰 手动选择" ]
+                else
+                    [ "GEOSITE,category-ads-all,REJECT"
+                      "GEOSITE,cn,DIRECT"
+                      "GEOIP,CN,DIRECT"
+                      "MATCH,🔰 手动选择" ]
 
-            if rules.IsEmpty then rules <- [ "GEOIP,CN,DIRECT"; "MATCH,🔰 手动选择" ]
+            log $"  规则: {mode}（本地生成）"
 
             // 3. 自定义直连域名 + 组装 YAML
             for d in domains do
@@ -393,7 +269,7 @@ type UpdateService() =
                   yield "mixed-port: 7897"
                   yield "mode: rule" ]
 
-            log $"[√] {names.Length} 节点 | {rules.Length} 规则 | remap {remapped} 条"
+            log $"[√] {names.Length} 节点 | {rules.Length} 规则"
 
             // 4. 写入 Clash Verge
             let clashDir =
