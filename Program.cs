@@ -22,6 +22,7 @@ using DrawingBrushes = System.Drawing.Brushes;
 using DrawingColor = System.Drawing.Color;
 using DrawingFontFamily = System.Drawing.FontFamily;
 using DrawingLinearGradientBrush = System.Drawing.Drawing2D.LinearGradientBrush;
+using DrawingPen = System.Drawing.Pen;
 using MediaBrush = System.Windows.Media.Brush;
 using MediaFontFamily = System.Windows.Media.FontFamily;
 using WpfImage = System.Windows.Controls.Image;
@@ -74,26 +75,45 @@ static class Program
 
     static void RenderIconPreview(string path)
     {
-        Console.WriteLine($"icon font: {IconRenderer.IconFontName}");
-        var items = new (string name, DrawingColor color, char glyph)[]
+        var idle = DrawingColor.FromArgb(33, 150, 243);
+        var items = new List<(string name, object? frame, int size)>
         {
-            ("idle",     DrawingColor.FromArgb(33, 150, 243), Glyphs.Bolt),
-            ("running",  DrawingColor.FromArgb(255, 152, 0),  Glyphs.Bolt),
-            ("ok",       DrawingColor.FromArgb(76, 175, 80),  Glyphs.Bolt),
-            ("err",      DrawingColor.FromArgb(244, 67, 54),  Glyphs.Bolt),
-            ("idle-globe", DrawingColor.FromArgb(33, 150, 243), Glyphs.Globe),
-            ("idle-sync",  DrawingColor.FromArgb(33, 150, 243), Glyphs.Sync),
+            ("Rocket", IconConcept.Rocket, 32),
+            ("Plane", IconConcept.Plane, 32),
+            ("Globe", IconConcept.Globe, 32),
+            ("Nodes", IconConcept.Nodes, 32),
+            ("Bolt", IconConcept.Bolt, 32),
+            ("R-16", IconConcept.Rocket, 16),
+            ("R-24", IconConcept.Rocket, 24),
+            ("R-64", IconConcept.Rocket, 64),
+            ("run", IconConcept.Rocket, 32),
+            ("ok", IconConcept.Rocket, 32),
+            ("err", IconConcept.Rocket, 32),
+            ("mRefresh", IconKind.Refresh, 18),
+            ("mPower", IconKind.Power, 18),
+            ("mFolder", IconKind.Folder, 18),
+            ("mInfo", IconKind.Info, 18),
+            ("mCancel", IconKind.Cancel, 18),
         };
-        var sheet = new Bitmap(items.Length * 80 + 8, 88);
+        var sheet = new Bitmap(items.Count * 72 + 8, 96);
         using (var g = Graphics.FromImage(sheet))
         {
             g.Clear(DrawingColor.White);
-            var font = new Font("Segoe UI", 9);
-            for (int i = 0; i < items.Length; i++)
+            var font = new Font("Segoe UI", 8);
+            for (int i = 0; i < items.Count; i++)
             {
-                using var ic = IconRenderer.MakeStatusIcon(items[i].color, items[i].glyph);
-                g.DrawIcon(ic, 8 + i * 80, 8);
-                g.DrawString(items[i].name, font, DrawingBrushes.Gray, 8 + i * 80 + 18, 74);
+                var (name, frame, size) = items[i];
+                int x = 8 + i * 72;
+                int y = 8 + (48 - size) / 2 - 4;
+                using var img = frame is IconConcept concept
+                    ? IconRenderer.DrawFrame(size,
+                        name == "run" ? DrawingColor.FromArgb(255, 152, 0)
+                        : name == "ok" ? DrawingColor.FromArgb(76, 175, 80)
+                        : name == "err" ? DrawingColor.FromArgb(244, 67, 54)
+                        : idle, concept)
+                    : IconRenderer.MenuIcon((IconKind)frame!, size);
+                g.DrawImage(img, x, y);
+                g.DrawString(name, font, DrawingBrushes.Gray, x + 4, 66);
             }
         }
         sheet.Save(path, ImageFormat.Png);
@@ -101,50 +121,186 @@ static class Program
     }
 }
 
-// Segoe Fluent Icons / MDL2 字形码（Windows 10/11 内置）
-static class Glyphs
-{
-    public const char Bolt = '\uE945';      // 闪电
-    public const char Globe = '\uE774';     // 地球
-    public const char Sync = '\uE895';      // 同步
-    public const char Refresh = '\uE72C';   // 刷新
-    public const char Power = '\uE7E8';     // 电源
-    public const char Folder = '\uE838';    // 文件夹
-    public const char Info = '\uE946';      // 信息
-    public const char Cancel = '\uE711';    // X
-}
+// 菜单图标：矢量绘制（不用字体字形，避免系统字体缺失时回退到日文字库乱码）
+enum IconKind { Refresh, Power, Folder, Info, Cancel }
+
+enum IconConcept { Rocket, Plane, Globe, Nodes, Bolt }
 
 static class IconRenderer
 {
-    static readonly DrawingFontFamily IconFont;
-    public static string IconFontName => IconFont.Name;
+    // 矢量图形：全部用路径画，任何尺寸都锐利（不用字体字形，细线字形缩到 16px 会糊）
+    static readonly (float x, float y)[] BoltPts =
+    [
+        (0.62f, 0.03f), (0.16f, 0.55f), (0.44f, 0.55f),
+        (0.34f, 0.97f), (0.86f, 0.42f), (0.58f, 0.42f),
+    ];
 
-    static IconRenderer()
+    static readonly (float x, float y)[] RocketPts =
+    [
+        (0.50f, 0.02f), (0.78f, 0.32f), (0.68f, 0.72f), (0.85f, 0.94f),
+        (0.54f, 0.85f), (0.46f, 0.85f), (0.15f, 0.94f), (0.32f, 0.72f), (0.22f, 0.32f),
+    ];
+
+    static readonly (float x, float y)[] PlanePts =
+    [
+        (0.04f, 0.38f), (0.96f, 0.04f), (0.62f, 0.94f), (0.42f, 0.62f),
+    ];
+
+    static GraphicsPath PolyPath((float x, float y)[] pts, RectangleF box)
     {
-        var families = DrawingFontFamily.Families;
-        IconFont = families.FirstOrDefault(f => f.Name == "Segoe Fluent Icons")
-                ?? families.FirstOrDefault(f => f.Name == "Segoe MDL2 Assets")
-                ?? DrawingFontFamily.GenericSansSerif;
+        var p = new GraphicsPath();
+        p.AddPolygon(pts.Select(b => new PointF(box.X + b.x * box.Width, box.Y + b.y * box.Height)).ToArray());
+        return p;
     }
 
-    public static Icon MakeStatusIcon(DrawingColor c, char glyph)
+    public static Bitmap DrawFrame(int size, DrawingColor c, IconConcept concept = IconConcept.Rocket)
     {
-        var bmp = new Bitmap(64, 64);
+        var bmp = new Bitmap(size, size);
         using (var g = Graphics.FromImage(bmp))
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-            var rect = new Rectangle(5, 5, 54, 54);
-            using var path = RoundedRect(rect, 15);
-            using var brush = new DrawingLinearGradientBrush(rect, Lighten(c, 0.30f), Darken(c, 0.18f), 45f);
-            g.FillPath(brush, path);
-            DrawGlyph(g, glyph, DrawingBrushes.White, 26, new RectangleF(0, 0, 64, 64));
+            float m = size / 16f;
+            var rect = new RectangleF(m, m, size - 2 * m, size - 2 * m);
+            using var bg = RoundedRectF(rect, size * 0.26f);
+            using var brush = new DrawingLinearGradientBrush(rect, Lighten(c, 0.28f), Darken(c, 0.16f), 45f);
+            g.FillPath(brush, bg);
+
+            var box = new RectangleF(rect.X + rect.Width * 0.20f, rect.Y + rect.Height * 0.14f,
+                                     rect.Width * 0.60f, rect.Height * 0.72f);
+            using var white = new SolidBrush(DrawingColor.White);
+            switch (concept)
+            {
+                case IconConcept.Rocket:
+                    g.FillPath(white, PolyPath(RocketPts, box));
+                    // 舷窗（用背景色抠出圆点，不需要额外颜色）
+                    float wr = size * 0.095f;
+                    using (var win = new SolidBrush(Darken(c, 0.12f)))
+                        g.FillEllipse(win, box.X + box.Width * 0.5f - wr,
+                                      box.Y + box.Height * 0.28f - wr, wr * 2, wr * 2);
+                    break;
+                case IconConcept.Plane:
+                    g.FillPath(white, PolyPath(PlanePts, box));
+                    break;
+                case IconConcept.Bolt:
+                    g.FillPath(white, PolyPath(BoltPts, box));
+                    break;
+                case IconConcept.Globe:
+                    using (var pen = new DrawingPen(DrawingColor.White, Math.Max(1.2f, size * 0.07f)))
+                    {
+                        g.DrawEllipse(pen, box.X, box.Y, box.Width, box.Height);
+                        g.DrawEllipse(pen, box.X + box.Width * 0.38f, box.Y, box.Width * 0.24f, box.Height);
+                        g.DrawArc(pen, box.X - box.Width * 0.18f, box.Y + box.Height * 0.30f, box.Width * 1.36f, box.Height * 0.40f, 0, 180);
+                        g.DrawArc(pen, box.X - box.Width * 0.18f, box.Y + box.Height * 0.30f, box.Width * 1.36f, box.Height * 0.40f, 180, 180);
+                    }
+                    break;
+                case IconConcept.Nodes:
+                    using (var pen = new DrawingPen(DrawingColor.White, Math.Max(1.2f, size * 0.06f)))
+                    {
+                        float r = size * 0.085f;
+                        var c1 = new PointF(box.X + box.Width * 0.50f, box.Y + box.Height * 0.05f);
+                        var c2 = new PointF(box.X + box.Width * 0.08f, box.Y + box.Height * 0.92f);
+                        var c3 = new PointF(box.X + box.Width * 0.92f, box.Y + box.Height * 0.92f);
+                        g.DrawLine(pen, c1, c2);
+                        g.DrawLine(pen, c1, c3);
+                        g.DrawLine(pen, c2, c3);
+                        foreach (var p in new[] { c1, c2, c3 })
+                            g.FillEllipse(white, p.X - r, p.Y - r, r * 2, r * 2);
+                    }
+                    break;
+            }
         }
-        var h = bmp.GetHicon();
-        var icon = (Icon)Icon.FromHandle(h).Clone();
-        DestroyIcon(h);
-        bmp.Dispose();
-        return icon;
+        return bmp;
+    }
+
+    public static Bitmap MenuIcon(IconKind kind, int size = 18, DrawingColor? color = null)
+    {
+        var c = color ?? DrawingColor.FromArgb(90, 90, 90);
+        var bmp = new Bitmap(size, size);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using var pen = new DrawingPen(c, Math.Max(1.5f, size * 0.12f));
+            using var brush = new SolidBrush(c);
+            switch (kind)
+            {
+                case IconKind.Cancel:
+                    g.DrawLine(pen, size * 0.22f, size * 0.22f, size * 0.78f, size * 0.78f);
+                    g.DrawLine(pen, size * 0.78f, size * 0.22f, size * 0.22f, size * 0.78f);
+                    break;
+                case IconKind.Power:
+                    float pr = size * 0.36f;
+                    g.DrawArc(pen, size * 0.5f - pr, size * 0.5f - pr, pr * 2, pr * 2, 110, 320);
+                    g.DrawLine(pen, size * 0.5f, size * 0.15f, size * 0.5f, size * 0.55f);
+                    break;
+                case IconKind.Info:
+                    g.DrawEllipse(pen, size * 0.18f, size * 0.18f, size * 0.64f, size * 0.64f);
+                    g.DrawLine(pen, size * 0.5f, size * 0.40f, size * 0.5f, size * 0.70f);
+                    g.FillEllipse(brush, size * 0.46f, size * 0.24f, size * 0.08f, size * 0.08f);
+                    break;
+                case IconKind.Folder:
+                    g.FillPolygon(brush,
+                    [
+                        new PointF(size * 0.08f, size * 0.26f), new PointF(size * 0.42f, size * 0.26f),
+                        new PointF(size * 0.54f, size * 0.38f), new PointF(size * 0.92f, size * 0.38f),
+                        new PointF(size * 0.92f, size * 0.74f), new PointF(size * 0.08f, size * 0.74f),
+                    ]);
+                    break;
+                case IconKind.Refresh:
+                    float rr = size * 0.34f;
+                    g.DrawArc(pen, size * 0.5f - rr, size * 0.5f - rr, rr * 2, rr * 2, 200, 285);
+                    // 箭头头
+                    float a = 205f * MathF.PI / 180f; // 弧线端点(80°)切线方向
+                    var end = new PointF(size * 0.5f + rr * MathF.Cos(a), size * 0.5f + rr * MathF.Sin(a));
+                    float hw = size * 0.16f;
+                    var dir = new PointF(-MathF.Sin(a), MathF.Cos(a)); // 顺时针切线
+                    var perp = new PointF(-dir.Y, dir.X);
+                    g.FillPolygon(brush,
+                    [
+                        new PointF(end.X + dir.X * hw * 1.2f, end.Y + dir.Y * hw * 1.2f),
+                        new PointF(end.X + perp.X * hw, end.Y + perp.Y * hw),
+                        new PointF(end.X - perp.X * hw, end.Y - perp.Y * hw),
+                    ]);
+                    break;
+            }
+        }
+        return bmp;
+    }
+
+    // 多分辨率 ICO（PNG 帧，Vista+ 原生支持）
+    public static Icon MakeStatusIcon(DrawingColor c, IconConcept concept = IconConcept.Rocket)
+    {
+        var sizes = new[] { 16, 20, 24, 32, 48, 64 };
+        var frames = new List<(byte size, byte[] png)>();
+        foreach (var s in sizes)
+        {
+            using var bmp = DrawFrame(s, c, concept);
+            using var ms = new MemoryStream();
+            bmp.Save(ms, ImageFormat.Png);
+            frames.Add(((byte)s, ms.ToArray()));
+        }
+        var ico = new MemoryStream();
+        using (var w = new BinaryWriter(ico, System.Text.Encoding.UTF8, leaveOpen: true))
+        {// leaveOpen：Icon 会按需从流里读帧，流必须保持存活
+            w.Write((ushort)0);
+            w.Write((ushort)1);
+            w.Write((ushort)frames.Count);
+            int offset = 6 + 16 * frames.Count;
+            foreach (var (sz, png) in frames)
+            {
+                w.Write(sz);
+                w.Write(sz);
+                w.Write((byte)0);
+                w.Write((byte)0);
+                w.Write((ushort)1);
+                w.Write((ushort)32);
+                w.Write(png.Length);
+                w.Write(offset);
+                offset += png.Length;
+            }
+            foreach (var (_, png) in frames) w.Write(png);
+        }
+        ico.Position = 0;
+        return new Icon(ico);
     }
 
     public static BitmapSource ToImageSource(Bitmap bmp)
@@ -161,17 +317,10 @@ static class IconRenderer
         return img;
     }
 
-    static void DrawGlyph(Graphics g, char glyph, DrawingBrush brush, float fontPx, RectangleF bounds)
-    {
-        using var f = new Font(IconFont, fontPx, System.Drawing.FontStyle.Regular, GraphicsUnit.Pixel);
-        using var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-        g.DrawString(glyph.ToString(), f, brush, bounds, sf);
-    }
-
-    static GraphicsPath RoundedRect(Rectangle r, int radius)
+    static GraphicsPath RoundedRectF(RectangleF r, float radius)
     {
         var p = new GraphicsPath();
-        int d = radius * 2;
+        float d = radius * 2;
         p.AddArc(r.X, r.Y, d, d, 180, 90);
         p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
         p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
@@ -226,7 +375,7 @@ sealed class App : Application
 
               <Style TargetType="MenuItem">
                 <Setter Property="Foreground" Value="{StaticResource Fg}"/>
-                <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
+                <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, Microsoft YaHei"/>
                 <Setter Property="FontSize" Value="13"/>
                 <Setter Property="Template">
                   <Setter.Value>
@@ -272,7 +421,7 @@ sealed class App : Application
               <Style x:Key="AccentButton" TargetType="Button">
                 <Setter Property="Foreground" Value="White"/>
                 <Setter Property="Background" Value="{StaticResource Accent}"/>
-                <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
+                <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, Microsoft YaHei"/>
                 <Setter Property="FontSize" Value="13"/>
                 <Setter Property="Cursor" Value="Hand"/>
                 <Setter Property="Template">
@@ -297,7 +446,7 @@ sealed class App : Application
               <Style x:Key="PlainButton" TargetType="Button">
                 <Setter Property="Foreground" Value="{StaticResource Fg}"/>
                 <Setter Property="Background" Value="White"/>
-                <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
+                <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, Microsoft YaHei"/>
                 <Setter Property="FontSize" Value="13"/>
                 <Setter Property="Cursor" Value="Hand"/>
                 <Setter Property="Template">
@@ -346,21 +495,21 @@ sealed class TrayController
     {
         _ui = Dispatcher.CurrentDispatcher;
         _icon = icon;
-        _idleIcon = IconRenderer.MakeStatusIcon(DrawingColor.FromArgb(33, 150, 243), Glyphs.Bolt);
-        _runIcon = IconRenderer.MakeStatusIcon(DrawingColor.FromArgb(255, 152, 0), Glyphs.Bolt);
-        _okIcon = IconRenderer.MakeStatusIcon(DrawingColor.FromArgb(76, 175, 80), Glyphs.Bolt);
-        _errIcon = IconRenderer.MakeStatusIcon(DrawingColor.FromArgb(244, 67, 54), Glyphs.Bolt);
+        _idleIcon = IconRenderer.MakeStatusIcon(DrawingColor.FromArgb(33, 150, 243));
+        _runIcon = IconRenderer.MakeStatusIcon(DrawingColor.FromArgb(255, 152, 0));
+        _okIcon = IconRenderer.MakeStatusIcon(DrawingColor.FromArgb(76, 175, 80));
+        _errIcon = IconRenderer.MakeStatusIcon(DrawingColor.FromArgb(244, 67, 54));
 
         var menu = new ContextMenu();
-        menu.Items.Add(MakeItem("更新订阅", Glyphs.Refresh, (_, _) => Update()));
-        _autoItem = MakeItem("开机自启", Glyphs.Power, (_, _) => ToggleAutostart());
+        menu.Items.Add(MakeItem("更新订阅", IconKind.Refresh, (_, _) => Update()));
+        _autoItem = MakeItem("开机自启", IconKind.Power, (_, _) => ToggleAutostart());
         _autoItem.IsCheckable = true;
         _autoItem.IsChecked = Program.IsAutostart();
         menu.Items.Add(_autoItem);
-        menu.Items.Add(MakeItem("打开配置目录", Glyphs.Folder, (_, _) => OpenConfigDir()));
-        menu.Items.Add(MakeItem("关于", Glyphs.Info, (_, _) => new AboutWindow().ShowDialog()));
+        menu.Items.Add(MakeItem("打开配置目录", IconKind.Folder, (_, _) => OpenConfigDir()));
+        menu.Items.Add(MakeItem("关于", IconKind.Info, (_, _) => new AboutWindow().ShowDialog()));
         menu.Items.Add(new Separator { Style = (Style)Application.Current.Resources["MenuSeparator"] });
-        menu.Items.Add(MakeItem("退出", Glyphs.Cancel, (_, _) => Exit()));
+        menu.Items.Add(MakeItem("退出", IconKind.Cancel, (_, _) => Exit()));
 
         _icon.Icon = _idleIcon;
         _icon.ToolTipText = "sub2clash — 就绪";
@@ -372,18 +521,13 @@ sealed class TrayController
         _idleTimer.Tick += (_, _) => { _idleTimer.Stop(); SetStatus(_idleIcon, "sub2clash — 就绪"); };
     }
 
-    static MenuItem MakeItem(string header, char glyph, RoutedEventHandler onClick)
+    static MenuItem MakeItem(string header, IconKind kind, RoutedEventHandler onClick)
     {
+        using var bmp = IconRenderer.MenuIcon(kind);
         var item = new MenuItem
         {
             Header = header,
-            Icon = new TextBlock
-            {
-                Text = glyph.ToString(),
-                FontFamily = new MediaFontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),
-                FontSize = 15,
-                Foreground = (MediaBrush)Application.Current.Resources["FgDim"],
-            },
+            Icon = new WpfImage { Source = IconRenderer.ToImageSource(bmp), Width = 18, Height = 18 },
         };
         item.Click += onClick;
         return item;
@@ -441,7 +585,7 @@ sealed class AboutWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         ShowInTaskbar = false;
         Background = System.Windows.Media.Brushes.White;
-        FontFamily = new MediaFontFamily("Segoe UI Variable Text, Segoe UI");
+        FontFamily = new MediaFontFamily("Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, Microsoft YaHei");
 
         var grid = new Grid { Margin = new Thickness(24, 20, 24, 20) };
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -449,7 +593,7 @@ sealed class AboutWindow : Window
         Content = grid;
 
         var top = new StackPanel { Orientation = Orientation.Horizontal };
-        using var bmp = IconRenderer.MakeStatusIcon(DrawingColor.FromArgb(33, 150, 243), Glyphs.Bolt).ToBitmap();
+        using var bmp = IconRenderer.DrawFrame(44, DrawingColor.FromArgb(33, 150, 243));
         top.Children.Add(new WpfImage { Source = IconRenderer.ToImageSource(bmp), Width = 44, Height = 44 });
 
         var info = new StackPanel { Margin = new Thickness(14, 0, 0, 0) };
