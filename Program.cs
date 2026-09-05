@@ -12,6 +12,7 @@ using System.Windows.Controls;
 using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 using System.Windows.Threading;
 using Hardcodet.Wpf.TaskbarNotification;
 using Microsoft.Win32;
@@ -26,6 +27,7 @@ using DrawingPen = System.Drawing.Pen;
 using MediaBrush = System.Windows.Media.Brush;
 using MediaFontFamily = System.Windows.Media.FontFamily;
 using WpfImage = System.Windows.Controls.Image;
+using WpfPath = System.Windows.Shapes.Path;
 
 namespace Sub2Clash;
 
@@ -89,11 +91,11 @@ static class Program
             ("run", IconConcept.Rocket, 32),
             ("ok", IconConcept.Rocket, 32),
             ("err", IconConcept.Rocket, 32),
-            ("mRefresh", IconKind.Refresh, 18),
-            ("mPower", IconKind.Power, 18),
-            ("mFolder", IconKind.Folder, 18),
-            ("mInfo", IconKind.Info, 18),
-            ("mCancel", IconKind.Cancel, 18),
+            ("mRefresh", FluentIcons.ArrowSync, 18),
+            ("mPower", FluentIcons.Power, 18),
+            ("mFolder", FluentIcons.Folder, 18),
+            ("mInfo", FluentIcons.Info, 18),
+            ("mCancel", FluentIcons.Dismiss, 18),
         };
         var sheet = new Bitmap(items.Count * 72 + 8, 96);
         using (var g = Graphics.FromImage(sheet))
@@ -111,7 +113,7 @@ static class Program
                         : name == "ok" ? DrawingColor.FromArgb(76, 175, 80)
                         : name == "err" ? DrawingColor.FromArgb(244, 67, 54)
                         : idle, concept)
-                    : IconRenderer.MenuIcon((IconKind)frame!, size);
+                    : IconRenderer.RenderFluent((string)frame!, size, DrawingColor.FromArgb(90, 90, 90));
                 g.DrawImage(img, x, y);
                 g.DrawString(name, font, DrawingBrushes.Gray, x + 4, 66);
             }
@@ -121,8 +123,28 @@ static class Program
     }
 }
 
-// 菜单图标：矢量绘制（不用字体字形，避免系统字体缺失时回退到日文字库乱码）
-enum IconKind { Refresh, Power, Folder, Info, Cancel }
+// 微软官方 Fluent System Icons 矢量路径（MIT 协议：https://github.com/microsoft/fluentui-system-icons）
+// 纯 Geometry 渲染，不依赖任何字体，从根上避免字体回退乱码
+static class FluentIcons
+{
+    public const string Rocket =
+        "M10.7555 6.42502C11.5359 5.64466 12.801 5.64557 13.5813 6.42586C14.3616 7.20616 14.3625 8.47131 13.5822 9.25167C12.8018 10.032 11.5367 10.0311 10.7564 9.25082C9.97608 8.47053 9.97516 7.20537 10.7555 6.42502ZM12.8742 7.13297C12.4839 6.74267 11.8519 6.74282 11.4626 7.13212C11.0733 7.52142 11.0732 8.15342 11.4635 8.54372C11.8538 8.93402 12.4858 8.93386 12.8751 8.54456C13.2644 8.15526 13.2645 7.52327 12.8742 7.13297ZM9.43752 13.5982L10.0469 14.2076C10.5076 14.6683 11.1934 14.7667 11.7503 14.5027L12.8701 15.6226C13.0654 15.8179 13.382 15.8179 13.5772 15.6226L15.0036 14.1963C15.8556 13.3443 15.9589 12.0271 15.3136 11.0623L16.1617 10.2141C17.818 8.55786 18.4175 6.11894 17.7179 3.8836C17.4799 3.12306 16.8843 2.52744 16.1237 2.28942C13.8884 1.58983 11.4495 2.18938 9.79324 3.84561L8.94321 4.69564C7.97391 4.05374 6.65528 4.15975 5.80136 5.01367L4.38474 6.43029C4.29097 6.52406 4.23829 6.65124 4.23829 6.78384C4.23829 6.91645 4.29097 7.04363 4.38474 7.1374L5.50455 8.25721C5.24068 8.81402 5.33907 9.49977 5.79974 9.96044L6.40947 10.5702L5.18924 11.3014C5.05713 11.3806 4.96888 11.5162 4.95002 11.6691C4.93116 11.8219 4.9838 11.9749 5.0927 12.0838L7.92339 14.9145C8.03227 15.0234 8.18524 15.0761 8.33806 15.0572C8.49088 15.0384 8.62651 14.9502 8.70571 14.8182L9.43752 13.5982ZM16.7636 4.18228C17.352 6.06247 16.8477 8.1139 15.4546 9.50698L11.4611 13.5005C11.2658 13.6958 10.9493 13.6958 10.754 13.5005L9.69444 12.4409L9.69177 12.4382L7.56967 10.3161L7.567 10.3135L6.50684 9.25333C6.31158 9.05807 6.31158 8.74148 6.50684 8.54622L10.5004 4.55271C11.8934 3.15963 13.9449 2.65534 15.8251 3.24377C16.2728 3.3839 16.6234 3.73454 16.7636 4.18228ZM5.805 14.9094C6.00026 14.7141 6.00026 14.3975 5.805 14.2023C5.60974 14.007 5.29316 14.007 5.0979 14.2023L3.33013 15.97C3.13487 16.1653 3.13487 16.4819 3.33013 16.6771C3.52539 16.8724 3.84197 16.8724 4.03724 16.6771L5.805 14.9094ZM4.3896 12.7869C4.58486 12.9822 4.58486 13.2988 4.3896 13.4941L3.6807 14.2029C3.48544 14.3982 3.16886 14.3982 2.97359 14.2029C2.77833 14.0077 2.77833 13.6911 2.9736 13.4958L3.68249 12.7869C3.87775 12.5917 4.19433 12.5917 4.3896 12.7869ZM7.22029 16.3248C7.41555 16.1295 7.41555 15.813 7.22029 15.6177C7.02502 15.4224 6.70844 15.4224 6.51318 15.6177L5.80428 16.3266C5.60902 16.5218 5.60902 16.8384 5.80428 17.0337C5.99955 17.229 6.31613 17.229 6.51139 17.0337L7.22029 16.3248Z";
+
+    public const string ArrowSync =
+        "M9.88501 3.75004C8.32299 3.77855 6.77186 4.38831 5.58059 5.57957C3.13981 8.02035 3.13981 11.9776 5.58059 14.4184C5.79547 14.6333 6.02176 14.829 6.25739 15.0056C6.5888 15.2541 6.65604 15.7242 6.40758 16.0556C6.15911 16.387 5.68902 16.4543 5.3576 16.2058C5.06528 15.9866 4.78521 15.7443 4.51993 15.4791C1.49336 12.4525 1.49336 7.54548 4.51993 4.51891C5.86716 3.17169 7.58814 2.42408 9.34839 2.2763L8.76258 1.69049C8.46969 1.39759 8.46969 0.922719 8.76258 0.629826C9.05547 0.336933 9.53035 0.336933 9.82324 0.629826L11.9446 2.75115C12.2375 3.04404 12.2375 3.51891 11.9446 3.81181L9.82324 5.93313C9.53035 6.22602 9.05547 6.22602 8.76258 5.93313C8.46969 5.64023 8.46969 5.16536 8.76258 4.87247L9.88501 3.75004ZM10.115 16.2479C11.677 16.2194 13.2281 15.6096 14.4194 14.4184C16.8602 11.9776 16.8602 8.02031 14.4194 5.57953C14.2045 5.36466 13.9782 5.16896 13.7426 4.9923C13.4112 4.74383 13.344 4.27374 13.5924 3.94233C13.8409 3.61091 14.311 3.54367 14.6424 3.79214C14.9347 4.0113 15.2148 4.25359 15.4801 4.51887C18.5066 7.54543 18.5066 12.4525 15.4801 15.479C14.1328 16.8263 12.4119 17.5739 10.6516 17.7216L11.2374 18.3075C11.5303 18.6003 11.5303 19.0752 11.2374 19.3681C10.9445 19.661 10.4696 19.661 10.1768 19.3681L8.05543 17.2468C7.76253 16.9539 7.76253 16.479 8.05543 16.1861L10.1768 14.0648C10.4696 13.7719 10.9445 13.7719 11.2374 14.0648C11.5303 14.3577 11.5303 14.8326 11.2374 15.1255L10.115 16.2479Z";
+
+    public const string Power =
+        "M10.75 2.5C10.75 2.08579 10.4142 1.75 10 1.75C9.58579 1.75 9.25 2.08579 9.25 2.5V8.5C9.25 8.91421 9.58579 9.25 10 9.25C10.4142 9.25 10.75 8.91421 10.75 8.5V2.5ZM13.7432 4.00091C13.3843 3.79418 12.9257 3.91757 12.719 4.2765C12.5122 4.63544 12.6356 5.094 12.9946 5.30073C14.1393 5.96007 15.0345 6.9788 15.5412 8.19885C16.0478 9.4189 16.1377 10.7721 15.7968 12.0484C15.4559 13.3247 14.7032 14.4528 13.6557 15.2578C12.6081 16.0627 11.3242 16.4993 10.0031 16.5C8.68207 16.5007 7.3977 16.0654 6.3493 15.2616C5.30091 14.4578 4.54711 13.3304 4.20485 12.0545C3.8626 10.7785 3.95103 9.42523 4.45643 8.20465C4.96182 6.98407 5.85592 5.96441 7 5.30387C7.35872 5.09676 7.48163 4.63807 7.27452 4.27935C7.06742 3.92063 6.60872 3.79773 6.25 4.00483C4.8199 4.8305 3.70227 6.10508 3.07053 7.6308C2.43879 9.15653 2.32825 10.8481 2.75607 12.4431C3.18388 14.038 4.12613 15.4472 5.43663 16.452C6.74712 17.4567 8.35259 18.0009 10.0039 18C11.6553 17.9992 13.2602 17.4533 14.5696 16.4472C15.879 15.4411 16.8198 14.0309 17.246 12.4355C17.6721 10.8401 17.5598 9.14861 16.9265 7.62355C16.2931 6.09849 15.1742 4.82508 13.7432 4.00091Z";
+
+    public const string Folder =
+        "M2 5.5C2 4.11929 3.11929 3 4.5 3H6.98223C7.44636 3 7.89148 3.18437 8.21967 3.51256L9.5 4.79289L7.43934 6.85355C7.34557 6.94732 7.21839 7 7.08579 7H2V5.5ZM2 8V14.5C2 15.8807 3.11929 17 4.5 17H15.5C16.8807 17 18 15.8807 18 14.5V7.5C18 6.11929 16.8807 5 15.5 5H10.7071L8.14645 7.56066C7.86514 7.84196 7.48361 8 7.08579 8H2Z";
+
+    public const string Info =
+        "M18 10C18 5.58172 14.4183 2 10 2C5.58172 2 2 5.58172 2 10C2 14.4183 5.58172 18 10 18C14.4183 18 18 14.4183 18 10ZM9.50806 8.91012C9.55039 8.67687 9.75454 8.49999 10 8.49999C10.2455 8.49999 10.4496 8.67687 10.4919 8.91012L10.5 8.99999V13.5021L10.4919 13.592C10.4496 13.8253 10.2455 14.0021 10 14.0021C9.75454 14.0021 9.55039 13.8253 9.50806 13.592L9.5 13.5021V8.99999L9.50806 8.91012ZM9.25 6.74999C9.25 6.33578 9.58579 5.99999 10 5.99999C10.4142 5.99999 10.75 6.33578 10.75 6.74999C10.75 7.16421 10.4142 7.49999 10 7.49999C9.58579 7.49999 9.25 7.16421 9.25 6.74999Z";
+
+    public const string Dismiss =
+        "M3.89705 4.05379L3.96967 3.96967C4.23594 3.7034 4.6526 3.6792 4.94621 3.89705L5.03033 3.96967L10 8.939L14.9697 3.96967C15.2359 3.7034 15.6526 3.6792 15.9462 3.89705L16.0303 3.96967C16.2966 4.23594 16.3208 4.6526 16.1029 4.94621L16.0303 5.03033L11.061 10L16.0303 14.9697C16.2966 15.2359 16.3208 15.6526 16.1029 15.9462L16.0303 16.0303C15.7641 16.2966 15.3474 16.3208 15.0538 16.1029L14.9697 16.0303L10 11.061L5.03033 16.0303C4.76406 16.2966 4.3474 16.3208 4.05379 16.1029L3.96967 16.0303C3.7034 15.7641 3.6792 15.3474 3.89705 15.0538L3.96967 14.9697L8.939 10L3.96967 5.03033C3.7034 4.76406 3.6792 4.3474 3.89705 4.05379L3.96967 3.96967L3.89705 4.05379Z";
+}
 
 enum IconConcept { Rocket, Plane, Globe, Nodes, Bolt }
 
@@ -212,58 +234,27 @@ static class IconRenderer
         return bmp;
     }
 
-    public static Bitmap MenuIcon(IconKind kind, int size = 18, DrawingColor? color = null)
+    // 把 Fluent 矢量路径渲染成位图（预览用；正式菜单直接用 WPF Path，零字体）
+    public static Bitmap RenderFluent(string pathData, int size, DrawingColor color)
     {
-        var c = color ?? DrawingColor.FromArgb(90, 90, 90);
-        var bmp = new Bitmap(size, size);
-        using (var g = Graphics.FromImage(bmp))
+        var geo = Geometry.Parse(pathData);
+        var dv = new DrawingVisual();
+        using (var dc = dv.RenderOpen())
         {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            using var pen = new DrawingPen(c, Math.Max(1.5f, size * 0.12f));
-            using var brush = new SolidBrush(c);
-            switch (kind)
-            {
-                case IconKind.Cancel:
-                    g.DrawLine(pen, size * 0.22f, size * 0.22f, size * 0.78f, size * 0.78f);
-                    g.DrawLine(pen, size * 0.78f, size * 0.22f, size * 0.22f, size * 0.78f);
-                    break;
-                case IconKind.Power:
-                    float pr = size * 0.36f;
-                    g.DrawArc(pen, size * 0.5f - pr, size * 0.5f - pr, pr * 2, pr * 2, 110, 320);
-                    g.DrawLine(pen, size * 0.5f, size * 0.15f, size * 0.5f, size * 0.55f);
-                    break;
-                case IconKind.Info:
-                    g.DrawEllipse(pen, size * 0.18f, size * 0.18f, size * 0.64f, size * 0.64f);
-                    g.DrawLine(pen, size * 0.5f, size * 0.40f, size * 0.5f, size * 0.70f);
-                    g.FillEllipse(brush, size * 0.46f, size * 0.24f, size * 0.08f, size * 0.08f);
-                    break;
-                case IconKind.Folder:
-                    g.FillPolygon(brush,
-                    [
-                        new PointF(size * 0.08f, size * 0.26f), new PointF(size * 0.42f, size * 0.26f),
-                        new PointF(size * 0.54f, size * 0.38f), new PointF(size * 0.92f, size * 0.38f),
-                        new PointF(size * 0.92f, size * 0.74f), new PointF(size * 0.08f, size * 0.74f),
-                    ]);
-                    break;
-                case IconKind.Refresh:
-                    float rr = size * 0.34f;
-                    g.DrawArc(pen, size * 0.5f - rr, size * 0.5f - rr, rr * 2, rr * 2, 200, 285);
-                    // 箭头头
-                    float a = 205f * MathF.PI / 180f; // 弧线端点(80°)切线方向
-                    var end = new PointF(size * 0.5f + rr * MathF.Cos(a), size * 0.5f + rr * MathF.Sin(a));
-                    float hw = size * 0.16f;
-                    var dir = new PointF(-MathF.Sin(a), MathF.Cos(a)); // 顺时针切线
-                    var perp = new PointF(-dir.Y, dir.X);
-                    g.FillPolygon(brush,
-                    [
-                        new PointF(end.X + dir.X * hw * 1.2f, end.Y + dir.Y * hw * 1.2f),
-                        new PointF(end.X + perp.X * hw, end.Y + perp.Y * hw),
-                        new PointF(end.X - perp.X * hw, end.Y - perp.Y * hw),
-                    ]);
-                    break;
-            }
+            dc.PushTransform(new ScaleTransform(size / 20.0, size / 20.0));
+            dc.DrawGeometry(
+                new SolidColorBrush(System.Windows.Media.Color.FromArgb(color.A, color.R, color.G, color.B)),
+                null, geo);
+            dc.Pop();
         }
-        return bmp;
+        var rtb = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+        rtb.Render(dv);
+        var enc = new PngBitmapEncoder();
+        enc.Frames.Add(BitmapFrame.Create(rtb));
+        using var ms = new MemoryStream();
+        enc.Save(ms);
+        ms.Position = 0;
+        return new Bitmap(ms);
     }
 
     // 多分辨率 ICO（PNG 帧，Vista+ 原生支持）
@@ -501,15 +492,15 @@ sealed class TrayController
         _errIcon = IconRenderer.MakeStatusIcon(DrawingColor.FromArgb(244, 67, 54));
 
         var menu = new ContextMenu();
-        menu.Items.Add(MakeItem("更新订阅", IconKind.Refresh, (_, _) => Update()));
-        _autoItem = MakeItem("开机自启", IconKind.Power, (_, _) => ToggleAutostart());
+        menu.Items.Add(MakeItem("更新订阅", FluentIcons.ArrowSync, (_, _) => Update()));
+        _autoItem = MakeItem("开机自启", FluentIcons.Power, (_, _) => ToggleAutostart());
         _autoItem.IsCheckable = true;
         _autoItem.IsChecked = Program.IsAutostart();
         menu.Items.Add(_autoItem);
-        menu.Items.Add(MakeItem("打开配置目录", IconKind.Folder, (_, _) => OpenConfigDir()));
-        menu.Items.Add(MakeItem("关于", IconKind.Info, (_, _) => new AboutWindow().ShowDialog()));
+        menu.Items.Add(MakeItem("打开配置目录", FluentIcons.Folder, (_, _) => OpenConfigDir()));
+        menu.Items.Add(MakeItem("关于", FluentIcons.Info, (_, _) => new AboutWindow().ShowDialog()));
         menu.Items.Add(new Separator { Style = (Style)Application.Current.Resources["MenuSeparator"] });
-        menu.Items.Add(MakeItem("退出", IconKind.Cancel, (_, _) => Exit()));
+        menu.Items.Add(MakeItem("退出", FluentIcons.Dismiss, (_, _) => Exit()));
 
         _icon.Icon = _idleIcon;
         _icon.ToolTipText = "sub2clash — 就绪";
@@ -521,13 +512,19 @@ sealed class TrayController
         _idleTimer.Tick += (_, _) => { _idleTimer.Stop(); SetStatus(_idleIcon, "sub2clash — 就绪"); };
     }
 
-    static MenuItem MakeItem(string header, IconKind kind, RoutedEventHandler onClick)
+    static MenuItem MakeItem(string header, string pathData, RoutedEventHandler onClick)
     {
-        using var bmp = IconRenderer.MenuIcon(kind);
         var item = new MenuItem
         {
             Header = header,
-            Icon = new WpfImage { Source = IconRenderer.ToImageSource(bmp), Width = 18, Height = 18 },
+            Icon = new WpfPath
+            {
+                Data = Geometry.Parse(pathData),
+                Fill = (MediaBrush)Application.Current.Resources["FgDim"],
+                Width = 16,
+                Height = 16,
+                Stretch = Stretch.Uniform,
+            },
         };
         item.Click += onClick;
         return item;
